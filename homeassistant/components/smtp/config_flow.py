@@ -2,18 +2,14 @@
 
 from __future__ import annotations
 
-import contextlib
 import smtplib
 import socket
 from typing import Any
 
 import voluptuous as vol
-from homeassistant.config_entries import (
-    ConfigEntry,
-    ConfigFlow,
-    ConfigFlowResult,
-    OptionsFlow,
-)
+
+from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
+from homeassistant.core import callback
 from homeassistant.const import (
     CONF_PASSWORD,
     CONF_PORT,
@@ -23,7 +19,6 @@ from homeassistant.const import (
     CONF_USERNAME,
     CONF_VERIFY_SSL,
 )
-from homeassistant.core import callback
 from homeassistant.helpers.selector import (
     BooleanSelector,
     NumberSelector,
@@ -135,10 +130,6 @@ def _try_connect(
     """Try to connect to the SMTP server and return error key if failed."""
     from homeassistant.util.ssl import client_context
 
-    # Ignore verify_ssl when no encryption is used
-    if encryption == "none":
-        verify_ssl = False
-
     ssl_context = client_context() if verify_ssl else None
     mail: smtplib.SMTP_SSL | smtplib.SMTP | None = None
 
@@ -164,16 +155,18 @@ def _try_connect(
 
         return None
 
+    except (socket.gaierror, ConnectionRefusedError, TimeoutError, OSError):
+        return "cannot_connect"
     except smtplib.SMTPAuthenticationError:
         return "invalid_auth"
     except smtplib.SMTPException:
         return "cannot_connect"
-    except (socket.gaierror, ConnectionRefusedError, TimeoutError, OSError):
-        return "cannot_connect"
     finally:
         if mail:
-            with contextlib.suppress(smtplib.SMTPException):
+            try:
                 mail.quit()
+            except smtplib.SMTPException:
+                pass
 
 
 class SMTPConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -273,9 +266,7 @@ def _build_options_schema(user_input: dict[str, Any], has_password: bool) -> vol
             ): TextSelector(),
             vol.Optional(
                 CONF_PASSWORD,
-                description={
-                    "suggested_value": UNCHANGED_PASSWORD if has_password else ""
-                },
+                description={"suggested_value": UNCHANGED_PASSWORD if has_password else ""},
             ): TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD)),
             # Email addresses
             vol.Required(

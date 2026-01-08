@@ -1,11 +1,10 @@
 {
   "domain": "smtp",
-  "name": "SMTP",
-  "codeowners": [
-    "@manjotsc"
-  ],
+  "name": "SMTP Email",
+  "codeowners": ["@manjotsc"],
   "config_flow": true,
-  "documentation": "https://www.home-assistant.io/integrations/smtp/",
-  "integration_type": "service",
-  "iot_class": "cloud_push"
+  "documentation": "https://github.com/manjotsc/ha-smtp",
+  "iot_class": "cloud_push",
+  "issue_tracker": "https://github.com/manjotsc/ha-smtp/issues",
+  "version": "1.0.3"
 }

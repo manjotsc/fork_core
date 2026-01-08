@@ -2,29 +2,28 @@
 
 from __future__ import annotations
 
-import email.utils
-import logging
-import os
-import smtplib
-import socket
-import ssl
 from email.mime.application import MIMEApplication
 from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+import email.utils
+import logging
+import os
 from pathlib import Path
+import smtplib
+import socket
+import ssl
 from typing import Any
 
 import voluptuous as vol
+
 from homeassistant.components.notify import (
     ATTR_DATA,
     ATTR_TARGET,
     ATTR_TITLE,
     ATTR_TITLE_DEFAULT,
-    BaseNotificationService,
-)
-from homeassistant.components.notify import (
     PLATFORM_SCHEMA as NOTIFY_PLATFORM_SCHEMA,
+    BaseNotificationService,
 )
 from homeassistant.const import (
     CONF_PASSWORD,
@@ -362,7 +361,7 @@ def _build_multipart_msg(
     hass: HomeAssistant, message: str, images: list[str]
 ) -> MIMEMultipart:
     """Build Multipart message with images as attachments."""
-    _LOGGER.debug("Building multipart email with image attachment(s)")
+    _LOGGER.debug("Building multipart email with image attachme_build_html_msgnt(s)")
     msg = MIMEMultipart()
     body_txt = MIMEText(message)
     msg.attach(body_txt)
