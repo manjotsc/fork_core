@@ -40,9 +40,11 @@ from homeassistant.helpers.selector import (
 from homeassistant.util.ssl import client_context
 
 from .const import (
+    CONF_DEBUG,
     CONF_ENCRYPTION,
     CONF_SENDER_NAME,
     CONF_SERVER,
+    DEFAULT_DEBUG,
     DEFAULT_ENCRYPTION,
     DEFAULT_HOST,
     DEFAULT_PORT,
@@ -114,6 +116,10 @@ def _build_schema(user_input: dict[str, Any] | None = None) -> vol.Schema:
             vol.Required(
                 CONF_VERIFY_SSL,
                 default=user_input.get(CONF_VERIFY_SSL, True),
+            ): BooleanSelector(),
+            vol.Required(
+                CONF_DEBUG,
+                default=user_input.get(CONF_DEBUG, DEFAULT_DEBUG),
             ): BooleanSelector(),
         }
     )
@@ -222,6 +228,37 @@ class SMTPConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    async def async_step_import(
+        self, import_data: dict[str, Any]
+    ) -> ConfigFlowResult:
+        """Handle import from YAML configuration."""
+        # Check if already configured with same sender
+        self._async_abort_entries_match({CONF_SENDER: import_data[CONF_SENDER]})
+
+        # Ensure recipients is a list
+        recipients = import_data.get(CONF_RECIPIENT, [])
+        if isinstance(recipients, str):
+            recipients = [r.strip() for r in recipients.split(",") if r.strip()]
+
+        data = {
+            CONF_SERVER: import_data.get(CONF_SERVER, DEFAULT_HOST),
+            CONF_PORT: import_data.get(CONF_PORT, DEFAULT_PORT),
+            CONF_TIMEOUT: import_data.get(CONF_TIMEOUT, DEFAULT_TIMEOUT),
+            CONF_ENCRYPTION: import_data.get(CONF_ENCRYPTION, DEFAULT_ENCRYPTION),
+            CONF_USERNAME: import_data.get(CONF_USERNAME),
+            CONF_PASSWORD: import_data.get(CONF_PASSWORD),
+            CONF_SENDER: import_data[CONF_SENDER],
+            CONF_SENDER_NAME: import_data.get(CONF_SENDER_NAME),
+            CONF_RECIPIENT: recipients,
+            CONF_DEBUG: import_data.get(CONF_DEBUG, DEFAULT_DEBUG),
+            CONF_VERIFY_SSL: import_data.get(CONF_VERIFY_SSL, True),
+        }
+
+        return self.async_create_entry(
+            title=import_data[CONF_SENDER],
+            data=data,
+        )
+
     @staticmethod
     @callback
     def async_get_options_flow(
@@ -296,6 +333,10 @@ def _build_options_schema(user_input: dict[str, Any], has_password: bool) -> vol
                 CONF_VERIFY_SSL,
                 default=user_input.get(CONF_VERIFY_SSL, True),
             ): BooleanSelector(),
+            vol.Required(
+                CONF_DEBUG,
+                default=user_input.get(CONF_DEBUG, DEFAULT_DEBUG),
+            ): BooleanSelector(),
         }
     )
 
@@ -367,6 +408,7 @@ class SMTPOptionsFlow(OptionsFlow):
             CONF_RECIPIENT: ", ".join(current.get(CONF_RECIPIENT, [])),
             CONF_TIMEOUT: current.get(CONF_TIMEOUT, DEFAULT_TIMEOUT),
             CONF_VERIFY_SSL: current.get(CONF_VERIFY_SSL, True),
+            CONF_DEBUG: current.get(CONF_DEBUG, DEFAULT_DEBUG),
         }
 
         return self.async_show_form(

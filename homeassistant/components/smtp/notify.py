@@ -35,9 +35,9 @@ from homeassistant.const import (
     CONF_VERIFY_SSL,
     Platform,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.core import DOMAIN as HOMEASSISTANT_DOMAIN, HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
-from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import config_validation as cv, issue_registry as ir
 from homeassistant.helpers.reload import setup_reload_service
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 from homeassistant.util import dt as dt_util
@@ -47,9 +47,11 @@ from .const import (
     ATTR_FROM_NAME,
     ATTR_HTML,
     ATTR_IMAGES,
+    CONF_DEBUG,
     CONF_ENCRYPTION,
     CONF_SENDER_NAME,
     CONF_SERVER,
+    DEFAULT_DEBUG,
     DEFAULT_ENCRYPTION,
     DEFAULT_HOST,
     DEFAULT_PORT,
@@ -92,6 +94,7 @@ PLATFORM_SCHEMA = NOTIFY_PLATFORM_SCHEMA.extend(
         vol.Optional(CONF_USERNAME): cv.string,
         vol.Optional(CONF_PASSWORD): cv.string,
         vol.Optional(CONF_SENDER_NAME): cv.string,
+        vol.Optional(CONF_DEBUG, default=DEFAULT_DEBUG): cv.boolean,
         vol.Optional(CONF_VERIFY_SSL, default=True): cv.boolean,
     }
 )
@@ -104,7 +107,33 @@ async def async_get_service(
 ) -> MailNotificationService | None:
     """Get the mail notification service."""
     if discovery_info is None:
-        # YAML configuration - use legacy setup
+        # YAML configuration - trigger import flow and create deprecation issue
+        hass.async_create_task(
+            hass.config_entries.flow.async_init(
+                DOMAIN,
+                context={"source": "import"},
+                data=config,
+            ),
+            eager_start=True,
+        )
+
+        ir.async_create_issue(
+            hass,
+            HOMEASSISTANT_DOMAIN,
+            f"deprecated_yaml_{DOMAIN}",
+            breaks_in_ha_version="2025.12.0",
+            is_fixable=False,
+            is_persistent=False,
+            issue_domain=DOMAIN,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key="deprecated_yaml",
+            translation_placeholders={
+                "domain": DOMAIN,
+                "integration_title": "SMTP",
+            },
+        )
+
+        # Still return legacy service during deprecation period
         return await hass.async_add_executor_job(
             get_service, hass, config, discovery_info
         )
@@ -123,6 +152,7 @@ async def async_get_service(
         discovery_info.get(CONF_PASSWORD),
         discovery_info[CONF_RECIPIENT],
         discovery_info.get(CONF_SENDER_NAME),
+        discovery_info[CONF_DEBUG],
         verify_ssl,
         ssl_context,
     )
@@ -146,6 +176,7 @@ def get_service(
         config.get(CONF_PASSWORD),
         config[CONF_RECIPIENT],
         config.get(CONF_SENDER_NAME),
+        config[CONF_DEBUG],
         config[CONF_VERIFY_SSL],
         ssl_context,
     )
@@ -170,6 +201,7 @@ class MailNotificationService(BaseNotificationService):
         password: str | None,
         recipients: list[str],
         sender_name: str | None,
+        debug: bool,
         verify_ssl: bool,
         ssl_context: ssl.SSLContext | None,
     ) -> None:
@@ -183,6 +215,7 @@ class MailNotificationService(BaseNotificationService):
         self.password = password
         self.recipients = recipients
         self._sender_name = sender_name
+        self.debug = debug
         self._verify_ssl = verify_ssl
         self.tries = 2
         self._ssl_context = ssl_context
@@ -190,9 +223,8 @@ class MailNotificationService(BaseNotificationService):
     def connect(self) -> smtplib.SMTP_SSL | smtplib.SMTP:
         """Connect/authenticate to SMTP Server."""
         mail: smtplib.SMTP_SSL | smtplib.SMTP
-        debug_enabled = _LOGGER.isEnabledFor(logging.DEBUG)
         if self.encryption == "tls":
-            if debug_enabled:
+            if self.debug:
                 mail = _LoggingSMTP_SSL(
                     self._server,
                     self._port,
@@ -206,11 +238,11 @@ class MailNotificationService(BaseNotificationService):
                     timeout=self._timeout,
                     context=self._ssl_context,
                 )
-        elif debug_enabled:
+        elif self.debug:
             mail = _LoggingSMTP(self._server, self._port, timeout=self._timeout)
         else:
             mail = smtplib.SMTP(self._server, self._port, timeout=self._timeout)
-        mail.set_debuglevel(debug_enabled)
+        mail.set_debuglevel(self.debug)
         mail.ehlo_or_helo_if_needed()
         if self.encryption == "starttls":
             mail.starttls(context=self._ssl_context)
