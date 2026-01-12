@@ -108,30 +108,44 @@ async def async_get_service(
     """Get the mail notification service."""
     if discovery_info is None:
         # YAML configuration - trigger import flow and create deprecation issue
-        hass.async_create_task(
-            hass.config_entries.flow.async_init(
-                DOMAIN,
-                context={"source": "import"},
-                data=config,
-            ),
-            eager_start=True,
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": "import"},
+            data=config,
         )
 
-        ir.async_create_issue(
-            hass,
-            HOMEASSISTANT_DOMAIN,
-            f"deprecated_yaml_{DOMAIN}",
-            breaks_in_ha_version="2025.12.0",
-            is_fixable=False,
-            is_persistent=False,
-            issue_domain=DOMAIN,
-            severity=ir.IssueSeverity.WARNING,
-            translation_key="deprecated_yaml",
-            translation_placeholders={
-                "domain": DOMAIN,
-                "integration_title": "SMTP",
-            },
-        )
+        if result.get("type") == "abort" and result.get("reason") != "already_configured":
+            ir.async_create_issue(
+                hass,
+                DOMAIN,
+                f"deprecated_yaml_import_issue_{result.get('reason')}",
+                breaks_in_ha_version="2025.12.0",
+                is_fixable=False,
+                is_persistent=True,
+                issue_domain=DOMAIN,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key=f"deprecated_yaml_import_issue_{result.get('reason')}",
+                translation_placeholders={
+                    "domain": DOMAIN,
+                    "integration_title": "SMTP",
+                },
+            )
+        else:
+            ir.async_create_issue(
+                hass,
+                HOMEASSISTANT_DOMAIN,
+                f"deprecated_yaml_{DOMAIN}",
+                breaks_in_ha_version="2025.12.0",
+                is_fixable=False,
+                is_persistent=True,
+                issue_domain=DOMAIN,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key="deprecated_yaml",
+                translation_placeholders={
+                    "domain": DOMAIN,
+                    "integration_title": "SMTP",
+                },
+            )
 
         # Still return legacy service during deprecation period
         return await hass.async_add_executor_job(
