@@ -206,11 +206,10 @@ class MailNotificationService(BaseNotificationService):
                     timeout=self._timeout,
                     context=self._ssl_context,
                 )
+        elif debug_enabled:
+            mail = _LoggingSMTP(self._server, self._port, timeout=self._timeout)
         else:
-            if debug_enabled:
-                mail = _LoggingSMTP(self._server, self._port, timeout=self._timeout)
-            else:
-                mail = smtplib.SMTP(self._server, self._port, timeout=self._timeout)
+            mail = smtplib.SMTP(self._server, self._port, timeout=self._timeout)
         mail.set_debuglevel(debug_enabled)
         mail.ehlo_or_helo_if_needed()
         if self.encryption == "starttls":
