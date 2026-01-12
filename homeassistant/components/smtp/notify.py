@@ -114,7 +114,10 @@ async def async_get_service(
             data=config,
         )
 
-        if result.get("type") == "abort" and result.get("reason") != "already_configured":
+        if (
+            result.get("type") == "abort"
+            and result.get("reason") != "already_configured"
+        ):
             ir.async_create_issue(
                 hass,
                 DOMAIN,
