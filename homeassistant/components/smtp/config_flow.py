@@ -40,11 +40,9 @@ from homeassistant.helpers.selector import (
 from homeassistant.util.ssl import client_context
 
 from .const import (
-    CONF_DEBUG,
     CONF_ENCRYPTION,
     CONF_SENDER_NAME,
     CONF_SERVER,
-    DEFAULT_DEBUG,
     DEFAULT_ENCRYPTION,
     DEFAULT_HOST,
     DEFAULT_PORT,
@@ -116,10 +114,6 @@ def _build_schema(user_input: dict[str, Any] | None = None) -> vol.Schema:
             vol.Required(
                 CONF_VERIFY_SSL,
                 default=user_input.get(CONF_VERIFY_SSL, True),
-            ): BooleanSelector(),
-            vol.Required(
-                CONF_DEBUG,
-                default=user_input.get(CONF_DEBUG, DEFAULT_DEBUG),
             ): BooleanSelector(),
         }
     )
@@ -302,10 +296,6 @@ def _build_options_schema(user_input: dict[str, Any], has_password: bool) -> vol
                 CONF_VERIFY_SSL,
                 default=user_input.get(CONF_VERIFY_SSL, True),
             ): BooleanSelector(),
-            vol.Required(
-                CONF_DEBUG,
-                default=user_input.get(CONF_DEBUG, DEFAULT_DEBUG),
-            ): BooleanSelector(),
         }
     )
 
@@ -377,7 +367,6 @@ class SMTPOptionsFlow(OptionsFlow):
             CONF_RECIPIENT: ", ".join(current.get(CONF_RECIPIENT, [])),
             CONF_TIMEOUT: current.get(CONF_TIMEOUT, DEFAULT_TIMEOUT),
             CONF_VERIFY_SSL: current.get(CONF_VERIFY_SSL, True),
-            CONF_DEBUG: current.get(CONF_DEBUG, DEFAULT_DEBUG),
         }
 
         return self.async_show_form(

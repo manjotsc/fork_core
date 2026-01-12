@@ -36,7 +36,6 @@ from .const import (
     ATTR_MESSAGE,
     ATTR_SUBJECT,
     ATTR_TO,
-    CONF_DEBUG,
     CONF_ENCRYPTION,
     CONF_SENDER_NAME,
     CONF_SERVER,
@@ -114,7 +113,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 password=data.get(CONF_PASSWORD),
                 recipients=data[CONF_RECIPIENT],
                 sender_name=data.get(CONF_SENDER_NAME),
-                debug=data[CONF_DEBUG],
                 verify_ssl=verify_ssl,
                 ssl_context=ssl_context,
             )

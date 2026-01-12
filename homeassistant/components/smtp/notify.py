@@ -47,11 +47,9 @@ from .const import (
     ATTR_FROM_NAME,
     ATTR_HTML,
     ATTR_IMAGES,
-    CONF_DEBUG,
     CONF_ENCRYPTION,
     CONF_SENDER_NAME,
     CONF_SERVER,
-    DEFAULT_DEBUG,
     DEFAULT_ENCRYPTION,
     DEFAULT_HOST,
     DEFAULT_PORT,
@@ -63,6 +61,23 @@ from .const import (
 PLATFORMS = [Platform.NOTIFY]
 
 _LOGGER = logging.getLogger(__name__)
+
+
+class _LoggingSMTP(smtplib.SMTP):
+    """SMTP client that logs debug output to Home Assistant logger."""
+
+    def _print_debug(self, *args: Any) -> None:
+        """Log debug messages to Home Assistant logger instead of stderr."""
+        _LOGGER.debug(" ".join(str(arg) for arg in args))
+
+
+class _LoggingSMTP_SSL(smtplib.SMTP_SSL):
+    """SMTP_SSL client that logs debug output to Home Assistant logger."""
+
+    def _print_debug(self, *args: Any) -> None:
+        """Log debug messages to Home Assistant logger instead of stderr."""
+        _LOGGER.debug(" ".join(str(arg) for arg in args))
+
 
 PLATFORM_SCHEMA = NOTIFY_PLATFORM_SCHEMA.extend(
     {
@@ -77,7 +92,6 @@ PLATFORM_SCHEMA = NOTIFY_PLATFORM_SCHEMA.extend(
         vol.Optional(CONF_USERNAME): cv.string,
         vol.Optional(CONF_PASSWORD): cv.string,
         vol.Optional(CONF_SENDER_NAME): cv.string,
-        vol.Optional(CONF_DEBUG, default=DEFAULT_DEBUG): cv.boolean,
         vol.Optional(CONF_VERIFY_SSL, default=True): cv.boolean,
     }
 )
@@ -109,7 +123,6 @@ async def async_get_service(
         discovery_info.get(CONF_PASSWORD),
         discovery_info[CONF_RECIPIENT],
         discovery_info.get(CONF_SENDER_NAME),
-        discovery_info[CONF_DEBUG],
         verify_ssl,
         ssl_context,
     )
@@ -133,7 +146,6 @@ def get_service(
         config.get(CONF_PASSWORD),
         config[CONF_RECIPIENT],
         config.get(CONF_SENDER_NAME),
-        config[CONF_DEBUG],
         config[CONF_VERIFY_SSL],
         ssl_context,
     )
@@ -158,7 +170,6 @@ class MailNotificationService(BaseNotificationService):
         password: str | None,
         recipients: list[str],
         sender_name: str | None,
-        debug: bool,
         verify_ssl: bool,
         ssl_context: ssl.SSLContext | None,
     ) -> None:
@@ -172,7 +183,6 @@ class MailNotificationService(BaseNotificationService):
         self.password = password
         self.recipients = recipients
         self._sender_name = sender_name
-        self.debug = debug
         self._verify_ssl = verify_ssl
         self.tries = 2
         self._ssl_context = ssl_context
@@ -180,16 +190,28 @@ class MailNotificationService(BaseNotificationService):
     def connect(self) -> smtplib.SMTP_SSL | smtplib.SMTP:
         """Connect/authenticate to SMTP Server."""
         mail: smtplib.SMTP_SSL | smtplib.SMTP
+        debug_enabled = _LOGGER.isEnabledFor(logging.DEBUG)
         if self.encryption == "tls":
-            mail = smtplib.SMTP_SSL(
-                self._server,
-                self._port,
-                timeout=self._timeout,
-                context=self._ssl_context,
-            )
+            if debug_enabled:
+                mail = _LoggingSMTP_SSL(
+                    self._server,
+                    self._port,
+                    timeout=self._timeout,
+                    context=self._ssl_context,
+                )
+            else:
+                mail = smtplib.SMTP_SSL(
+                    self._server,
+                    self._port,
+                    timeout=self._timeout,
+                    context=self._ssl_context,
+                )
         else:
-            mail = smtplib.SMTP(self._server, self._port, timeout=self._timeout)
-        mail.set_debuglevel(self.debug)
+            if debug_enabled:
+                mail = _LoggingSMTP(self._server, self._port, timeout=self._timeout)
+            else:
+                mail = smtplib.SMTP(self._server, self._port, timeout=self._timeout)
+        mail.set_debuglevel(debug_enabled)
         mail.ehlo_or_helo_if_needed()
         if self.encryption == "starttls":
             mail.starttls(context=self._ssl_context)
