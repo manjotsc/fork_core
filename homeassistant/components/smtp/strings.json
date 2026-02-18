@@ -5,7 +5,8 @@
     },
     "error": {
       "cannot_connect": "Cannot connect to mail server. Verify the server address, port, and security settings.",
-      "invalid_auth": "Login failed. Check your username and password."
+      "invalid_auth": "Login failed. Check your username and password.",
+      "invalid_email": "Invalid email address. Check the format (e.g. user@example.com)."
     },
     "step": {
       "user": {
@@ -33,33 +34,31 @@
           "server": "e.g. smtp.gmail.com, smtp.office365.com, smtp.mail.yahoo.com",
           "timeout": "How long to wait for server response",
           "username": "Your email address or account username",
-          "verify_ssl": "Ignored when security is set to None. Recommended to keep enabled."
+          "verify_ssl": "Recommended to keep enabled for security"
         },
         "description": "Connect Home Assistant to your email server to send notifications.",
         "title": "SMTP Email Setup"
       }
     }
   },
-  "entity": {
-    "sensor": {
-      "last_error": {
-        "name": "Last error"
-      },
-      "last_sent": {
-        "name": "Last sent"
-      }
-    }
-  },
   "exceptions": {
+    "attachment_not_found": {
+      "message": "Attachment \"{file_path}\" not found. Check the file path and ensure the file exists."
+    },
+    "entry_not_found": {
+      "message": "The selected SMTP account was not found or is not loaded."
+    },
     "remote_path_not_allowed": {
       "message": "Cannot send email with attachment \"{file_name}\" from directory \"{file_path}\" which is not secure to load data from. Only folders added to `{allow_list}` are accessible. See {url} for more information."
     }
   },
+  "issues": {
+    "deprecated_yaml": {
+      "description": "Configuring SMTP using YAML is being removed.\n\nYour existing YAML configuration has been imported into the UI automatically.\n\nRemove the SMTP YAML configuration from your configuration.yaml file and restart Home Assistant to fix this issue.",
+      "title": "SMTP YAML configuration is being removed"
+    }
+  },
   "options": {
-    "error": {
-      "cannot_connect": "Cannot connect to mail server. Verify the server address, port, and security settings.",
-      "invalid_auth": "Login failed. Check your username and password."
-    },
     "step": {
       "init": {
         "data": {
@@ -86,7 +85,7 @@
           "server": "e.g. smtp.gmail.com, smtp.office365.com, smtp.mail.yahoo.com",
           "timeout": "How long to wait for server response",
           "username": "Your email address or account username",
-          "verify_ssl": "Ignored when security is set to None. Recommended to keep enabled."
+          "verify_ssl": "Recommended to keep enabled for security"
         },
         "description": "Update your email server configuration.",
         "title": "Edit SMTP Settings"
@@ -115,7 +114,7 @@
           "name": "From name"
         },
         "html": {
-          "description": "HTML formatted content. Supports Jinja2 templates for dynamic sensor data.",
+          "description": "HTML formatted content. Supports Jinja2 templates for dynamic content.",
           "name": "HTML content"
         },
         "images": {
@@ -127,11 +126,11 @@
           "name": "Message"
         },
         "subject": {
-          "description": "Subject line. Supports templates and emojis.",
+          "description": "Subject line. Supports templates.",
           "name": "Subject"
         },
         "to": {
-          "description": "Add one email per line. Leave empty to use default from setup.",
+          "description": "Add one email per line. Leave empty to use the default recipient(s) from setup.",
           "name": "Recipients"
         }
       },

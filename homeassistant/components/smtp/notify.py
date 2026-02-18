@@ -26,6 +26,7 @@ from homeassistant.components.notify import (
     BaseNotificationService,
 )
 from homeassistant.const import (
+    CONF_NAME,
     CONF_PASSWORD,
     CONF_PORT,
     CONF_RECIPIENT,
@@ -35,9 +36,10 @@ from homeassistant.const import (
     CONF_VERIFY_SSL,
     Platform,
 )
-from homeassistant.core import DOMAIN as HOMEASSISTANT_DOMAIN, HomeAssistant
+from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
-from homeassistant.helpers import config_validation as cv, issue_registry as ir
+from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.issue_registry import IssueSeverity, async_create_issue
 from homeassistant.helpers.reload import setup_reload_service
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 from homeassistant.util import dt as dt_util
@@ -63,23 +65,6 @@ from .const import (
 PLATFORMS = [Platform.NOTIFY]
 
 _LOGGER = logging.getLogger(__name__)
-
-
-class _LoggingSMTP(smtplib.SMTP):
-    """SMTP client that logs debug output to Home Assistant logger."""
-
-    def _print_debug(self, *args: Any) -> None:
-        """Log debug messages to Home Assistant logger instead of stderr."""
-        _LOGGER.debug(" ".join(str(arg) for arg in args))
-
-
-class _LoggingSMTP_SSL(smtplib.SMTP_SSL):
-    """SMTP_SSL client that logs debug output to Home Assistant logger."""
-
-    def _print_debug(self, *args: Any) -> None:
-        """Log debug messages to Home Assistant logger instead of stderr."""
-        _LOGGER.debug(" ".join(str(arg) for arg in args))
-
 
 PLATFORM_SCHEMA = NOTIFY_PLATFORM_SCHEMA.extend(
     {
@@ -107,50 +92,38 @@ async def async_get_service(
 ) -> MailNotificationService | None:
     """Get the mail notification service."""
     if discovery_info is None:
-        # YAML configuration - trigger import flow and create deprecation issue
-        result = await hass.config_entries.flow.async_init(
+        # YAML configuration - create deprecation warning and trigger import
+        async_create_issue(
+            hass,
             DOMAIN,
-            context={"source": "import"},
-            data=config,
+            "deprecated_yaml",
+            breaks_in_ha_version="2026.3.0",
+            is_fixable=False,
+            severity=IssueSeverity.WARNING,
+            translation_key="deprecated_yaml",
         )
 
-        if (
-            result.get("type") == "abort"
-            and result.get("reason") != "already_configured"
-        ):
-            ir.async_create_issue(
-                hass,
+        hass.async_create_task(
+            hass.config_entries.flow.async_init(
                 DOMAIN,
-                f"deprecated_yaml_import_issue_{result.get('reason')}",
-                breaks_in_ha_version="2025.12.0",
-                is_fixable=False,
-                is_persistent=True,
-                issue_domain=DOMAIN,
-                severity=ir.IssueSeverity.WARNING,
-                translation_key=f"deprecated_yaml_import_issue_{result.get('reason')}",
-                translation_placeholders={
-                    "domain": DOMAIN,
-                    "integration_title": "SMTP",
+                context={"source": "import"},
+                data={
+                    CONF_NAME: config.get(CONF_NAME, config[CONF_SENDER]),
+                    CONF_SERVER: config.get(CONF_SERVER, DEFAULT_HOST),
+                    CONF_PORT: config.get(CONF_PORT, DEFAULT_PORT),
+                    CONF_TIMEOUT: config.get(CONF_TIMEOUT, DEFAULT_TIMEOUT),
+                    CONF_ENCRYPTION: config.get(CONF_ENCRYPTION, DEFAULT_ENCRYPTION),
+                    CONF_USERNAME: config.get(CONF_USERNAME),
+                    CONF_PASSWORD: config.get(CONF_PASSWORD),
+                    CONF_SENDER: config[CONF_SENDER],
+                    CONF_SENDER_NAME: config.get(CONF_SENDER_NAME),
+                    CONF_RECIPIENT: config[CONF_RECIPIENT],
+                    CONF_DEBUG: config.get(CONF_DEBUG, DEFAULT_DEBUG),
+                    CONF_VERIFY_SSL: config.get(CONF_VERIFY_SSL, True),
                 },
             )
-        else:
-            ir.async_create_issue(
-                hass,
-                HOMEASSISTANT_DOMAIN,
-                f"deprecated_yaml_{DOMAIN}",
-                breaks_in_ha_version="2025.12.0",
-                is_fixable=False,
-                is_persistent=True,
-                issue_domain=DOMAIN,
-                severity=ir.IssueSeverity.WARNING,
-                translation_key="deprecated_yaml",
-                translation_placeholders={
-                    "domain": DOMAIN,
-                    "integration_title": "SMTP",
-                },
-            )
-
-        # Still return legacy service during deprecation period
+        )
+        # Still set up legacy service so it works until restart
         return await hass.async_add_executor_job(
             get_service, hass, config, discovery_info
         )
@@ -241,22 +214,12 @@ class MailNotificationService(BaseNotificationService):
         """Connect/authenticate to SMTP Server."""
         mail: smtplib.SMTP_SSL | smtplib.SMTP
         if self.encryption == "tls":
-            if self.debug:
-                mail = _LoggingSMTP_SSL(
-                    self._server,
-                    self._port,
-                    timeout=self._timeout,
-                    context=self._ssl_context,
-                )
-            else:
-                mail = smtplib.SMTP_SSL(
-                    self._server,
-                    self._port,
-                    timeout=self._timeout,
-                    context=self._ssl_context,
-                )
-        elif self.debug:
-            mail = _LoggingSMTP(self._server, self._port, timeout=self._timeout)
+            mail = smtplib.SMTP_SSL(
+                self._server,
+                self._port,
+                timeout=self._timeout,
+                context=self._ssl_context,
+            )
         else:
             mail = smtplib.SMTP(self._server, self._port, timeout=self._timeout)
         mail.set_debuglevel(self.debug)
@@ -273,7 +236,7 @@ class MailNotificationService(BaseNotificationService):
         server = None
         try:
             server = self.connect()
-        except (socket.gaierror, ConnectionRefusedError):
+        except (socket.gaierror, ConnectionRefusedError):  # fmt: skip
             _LOGGER.exception(
                 (
                     "SMTP server not found or refused connection (%s:%s). Please check"
@@ -282,6 +245,7 @@ class MailNotificationService(BaseNotificationService):
                 self._server,
                 self._port,
             )
+            return False
 
         except smtplib.SMTPAuthenticationError:
             _LOGGER.exception(
@@ -373,7 +337,7 @@ def _build_text_msg(message: str) -> MIMEText:
 
 def _attach_file(
     hass: HomeAssistant, atch_name: str, content_id: str | None = None
-) -> MIMEImage | MIMEApplication | None:
+) -> MIMEImage | MIMEApplication:
     """Create a message attachment.
 
     If MIMEImage is successful and content_id is passed (HTML), add images in-line.
@@ -399,9 +363,12 @@ def _attach_file(
             )
         with open(atch_name, "rb") as attachment_file:
             file_bytes = attachment_file.read()
-    except FileNotFoundError:
-        _LOGGER.warning("Attachment %s not found. Skipping", atch_name)
-        return None
+    except FileNotFoundError as err:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key="attachment_not_found",
+            translation_placeholders={"file_path": atch_name},
+        ) from err
 
     attachment: MIMEImage | MIMEApplication
     try:
@@ -421,7 +388,7 @@ def _attach_file(
         else:
             attachment.add_header(
                 "Content-Disposition",
-                f"attachment; filename={os.path.basename(atch_name)}",
+                f'attachment; filename="{os.path.basename(atch_name)}"',
             )
 
     return attachment
@@ -437,9 +404,7 @@ def _build_multipart_msg(
     msg.attach(body_txt)
 
     for atch_name in images:
-        attachment = _attach_file(hass, atch_name)
-        if attachment:
-            msg.attach(attachment)
+        msg.attach(_attach_file(hass, atch_name))
 
     return msg
 
@@ -457,7 +422,5 @@ def _build_html_msg(
 
     for atch_name in images:
         name = os.path.basename(atch_name)
-        attachment = _attach_file(hass, atch_name, name)
-        if attachment:
-            msg.attach(attachment)
+        msg.attach(_attach_file(hass, atch_name, name))
     return msg
